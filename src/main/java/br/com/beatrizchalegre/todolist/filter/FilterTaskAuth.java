@@ -3,8 +3,12 @@ package br.com.beatrizchalegre.todolist.filter;
 import java.io.IOException;
 import java.util.Base64;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import at.favre.lib.crypto.bcrypt.BCrypt;
+import br.com.beatrizchalegre.todolist.users.IUserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,36 +17,51 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class FilterTaskAuth extends OncePerRequestFilter {
 
+    @Autowired
+    private IUserRepository userRepository;
+    
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        //Pegar a autenticação (usuário e senha)
-        var authorization = request.getHeader("Authorization");
+        var servletPath = request.getServletPath();
 
-        //Remove a palavra "Basic" para ficar apenas o código de autenticação que será decodificado
-        var authEncoded = authorization.substring("Basic".length()).trim();
+        if(servletPath.equals("/tasks/")) {
+            //Pegar a autenticação (usuário e senha)
+            var authorization = request.getHeader("Authorization");
 
-        byte[] authDecode = Base64.getDecoder().decode(authEncoded);
+            //Remove a palavra "Basic" para ficar apenas o código de autenticação que será decodificado
+            var authEncoded = authorization.substring("Basic".length()).trim();
 
-        var authString = new String(authDecode);
+            byte[] authDecode = Base64.getDecoder().decode(authEncoded);
 
-        String[] credentials = authString.split(":");
-        String username = credentials[0];
-        String password = credentials[1];
+            var authString = new String(authDecode);
 
-        System.out.println("Authorization");
-        System.out.println(authorization);
-        System.out.println(authEncoded);
-        System.out.println(authDecode);
-        System.out.println(authString);
-        System.out.println(username);
-        System.out.println(password);
+            String[] credentials = authString.split(":");
+            String username = credentials[0];
+            String password = credentials[1];
 
-        
+            System.out.println("Authorization");
+            System.out.println(authorization);
+            System.out.println(authEncoded);
+            System.out.println(authDecode);
+            System.out.println(authString);
+            System.out.println(username);
+            System.out.println(password);
 
-        //Validar usuário
-        //Validar senha
-        //"Segue Viagem"
-        filterChain.doFilter(request, response);
+            //Validar usuário
+            var user = this.userRepository.findByUsername(username);
+            if (user == null) {
+                response.sendError(401, "Usuário sem autorização");
+            } else {
+                var passwordVerify = BCrypt.verifyer().verify(password.toCharArray(), user.getPassword());
+                if (passwordVerify.verified) {
+                    request.setAttribute("idUser", user.getId());
+                    filterChain.doFilter(request, response);
+                } else {
+                    response.sendError(401);
+                }
+            }
+        } else {
+            filterChain.doFilter(request, response);
+        }
     }
-
 }
